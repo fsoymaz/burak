@@ -1,0 +1,35 @@
+<body>
+	
+	<section>
+		<div class="container bg-primary" style="z-index: 2;">
+			<div class="columns is-multiline">
+				<div class="column is-6 is-offset-3 mb-6">
+					<div class="hero-body">
+						<p class="title">Chatty</p>
+						<p class="subtitle">
+							A simple chat built with Django, Channels and Redis
+						</p>
+					</div>
+				</div>
+				<div class="column is-6 is-offset-3">
+					<div class="box" style="color: white;">
+						<div id="chat-messages" style="max-height: 300px; overflow-y: scroll"></div>
+					</div>
+					<div class="field">
+						<div class="control">
+							<input class="input" type="text" placeholder="Message" id="chat-message-input" />
+						</div>
+					</div>
+					<div class="field">
+						<div class="control">
+							<button class="button is-info" id="chat-message-submit">
+								Submit
+							</button>
+						</div>
+					</div>
+					<small class="has-text-grey-light" id="username-display"></small>
+				</div>
+			</div>
+		</div>
+	</section>
+</body>

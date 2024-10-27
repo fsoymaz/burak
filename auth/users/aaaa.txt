@@ -1,0 +1,449 @@
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.exceptions import AuthenticationFailed
+from .serializers import UserSerializer
+from django.http import JsonResponse
+from django.http import HttpResponse
+from .models import User
+import jwt, datetime
+import qrcode, pyotp, string, random, requests, json
+from django.core.files import File
+from django.http import JsonResponse
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+import os
+import smtplib
+from .mail_content import welcome_content, resetpass_content, qr_code_mailf
+import os.path
+from os import path
+
+class ForgetPass(APIView):
+    def post(self, request):
+        email = request.data.get('email')
+        flag = request.data.get('flag')
+        user = User.objects.filter(email=email).first()
+        if user is None:
+            raise AuthenticationFailed("User not found!")
+        if(flag == 1):
+            password = request.data.get('password')
+            user.set_password(str(password))
+            user.save()
+            return Response({'OK'}, status=200)
+        elif(flag == 2):
+            totp = pyotp.TOTP(user.twofactorkey)
+            user.resetpass = totp.now()
+            user.save()
+            try:
+                smtp_server = "smtp.gmail.com"
+                smtp_port = 587
+
+                msg = MIMEMultipart('alternative')
+                msg['From'] = "beyildir42@gmail.com"
+                msg['To'] = user.email
+                msg['Subject'] = totp.now()
+
+                part = MIMEText(resetpass_content, 'html')
+                msg.attach(part)
+
+                server = smtplib.SMTP(smtp_server, smtp_port)
+                server.starttls()
+                server.login("beyildir42@gmail.com", "fxyg milk xjho fauq")
+                server.sendmail("beyildir42@gmail.com", user.email, msg.as_string())
+                server.quit()
+            
+                print("E-posta başarıyla gönderildi.")
+                return Response({'OK'}, status=200)
+            except Exception as e:
+                return Response({'error': 'Mail gönderilemedi.'}, status=400)
+
+        else:
+            otp = request.data.get('otpInput')
+            if user.resetpass == str(otp):
+                password = request.data.get('password')
+                user.set_password(str(password))
+                user.save()
+                return Response({'OK'}, status=200)
+            else:
+                return Response({'error': 'Invalid TOTP code'}, status=400)
+        return Response({'OK'}, status=200)
+    
+
+class RegisterView(APIView):
+    def post(self, request):
+        serializer = UserSerializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            try:
+                smtp_server = "smtp.gmail.com"
+                smtp_port = 587
+
+                msg = MIMEMultipart('alternative')
+                msg['From'] = "beyildir42@gmail.com"
+                msg['To'] = user.email
+                msg['Subject'] = "Web Sitemize Hoş Geldiniz!"
+
+                part = MIMEText(welcome_content, 'html')
+                msg.attach(part)
+
+                server = smtplib.SMTP(smtp_server, smtp_port)
+                server.starttls()
+                server.login("beyildir42@gmail.com", "fxyg milk xjho fauq")
+                server.sendmail("beyildir42@gmail.com", user.email, msg.as_string())
+                server.quit()
+            
+                print("E-posta başarıyla gönderildi.")
+            except Exception as e:
+                print(f"E-posta gönderilemedi: {e}")
+            return Response({'message': 'User created successfully'}, status=201)
+        return Response(serializer.errors, status=400)
+
+from rest_framework.response import Response
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.views import APIView
+import pyotp
+import qrcode
+import jwt
+import datetime
+from django.core.mail import EmailMessage
+from django.core.files.base import ContentFile
+from io import BytesIO
+
+class TwoFactorActive(APIView):
+    def post(self, request):
+        username = request.data.get('username')
+        _bool = request.data.get('twofactoractive')
+
+        user = User.objects.filter(username=username).first()
+        if user is None:
+            raise AuthenticationFailed("User not found!")
+        if(user.twofactoractive == 1):
+            if(path.exists("/qrdata/" + user.username + ".png")):
+                user.twofactoractive = bool(_bool)
+                user.save()
+            else:
+                user.twofactoractive = bool(_bool)
+                pngfile = user.username + ".png"
+                key = user.twofactorkey
+                totp = pyotp.TOTP(key)
+                uri = pyotp.totp.TOTP(key).provisioning_uri(name=user.username, issuer_name="2FA Transcendence")
+                user.qrcode_url = uri
+                user.save()
+                qr_image = qrcode.make(uri)
+                qr_image.save("/qrdata/" + user.username + ".png")
+                print("QR Code başarıyla oluşturuldu.")
+                try:
+                    smtp_server = "smtp.gmail.com"
+                    smtp_port = 587
+
+                    print(user.email)
+                    msg = MIMEMultipart('alternative')
+                    msg['From'] = "beyildir42@gmail.com"
+                    msg['To'] = user.email
+                    msg['Subject'] = "Web Sitemize Hoş Geldiniz!"
+
+                    part = MIMEText(qr_code_mailf("/qrdata/" + user.username + ".png"), 'html')
+                    msg.attach(part)
+
+                    server = smtplib.SMTP(smtp_server, smtp_port)
+                    server.starttls()
+                    server.login("beyildir42@gmail.com", "fxyg milk xjho fauq")
+                    server.sendmail("beyildir42@gmail.com", user.email, msg.as_string())
+                    server.quit()
+                
+                    print(user.username)
+                    print("E-posta başarıyla gönderildi.")
+                except Exception as e:
+                    print(f"E-posta gönderilemedi: {e}")
+        # qr_image_io = BytesIO()
+        # qr_image.save(qr_image_io, format='PNG')
+
+        # user.twofactorqr.save(pngfile, ContentFile(qr_image_io.getvalue()), save=True)
+        payload = {
+            'id': user.id,
+            'email': user.email,
+			'username': user.username,
+            'twofactoractive': user.twofactoractive,
+            'is_uploadpp': user.is_uploadpp,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=1),
+            'iat': datetime.datetime.utcnow()
+        }
+
+        token = jwt.encode(payload, 'secret', algorithm='HS256')
+        response = Response()
+        response.set_cookie(key='jwt', value=token, httponly=False)
+        response.data = {
+            'token': token,
+        }
+        return response
+
+
+
+class QRCodeURL(APIView):
+    def get(self, request, username):
+        user = User.objects.filter(username=username).first()
+        if user is None:
+            raise AuthenticationFailed("User not found!")
+        return JsonResponse({'qrcode_url': user.twofactorqr.url})
+
+class LoginView(APIView):
+    def post(self, request):
+        email = request.data.get('email')
+        password = request.data.get('password')
+        if not email or not password:
+            return Response({'error': 'Please provide both email and password'}, status=400)
+
+        user = User.objects.filter(email=email).first()
+
+        if user is None:
+            raise AuthenticationFailed("User not found!")
+
+        if not user.check_password(password):
+            raise AuthenticationFailed("Incorrect password!")
+
+        if (user.twofactoractive == 1):
+            payload = {
+			'username': user.username,
+            'twofactoractive': user.twofactoractive,
+            }
+            token = jwt.encode(payload, 'secret', algorithm='HS256')
+            response = Response()
+            response.set_cookie(key='2fa', value=token, httponly=False)
+            response.data = {
+            'token': token,
+            }
+            return response
+
+        payload = {
+            'id': user.id,
+            'email': user.email,
+			'username': user.username,
+            'twofactoractive': user.twofactoractive,
+            'is_uploadpp': user.is_uploadpp,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=1),
+            'iat': datetime.datetime.utcnow()
+        }
+
+        token = jwt.encode(payload, 'secret', algorithm='HS256')
+        response = Response()
+        response.set_cookie(key='jwt', value=token, httponly=False)
+        response.data = {
+            'token': token,
+        }
+        return response
+
+class Login42View(APIView):
+    def post(self, request):
+        code = request.data.get('code')
+        url1 = 'https://api.intra.42.fr/oauth/token'
+        url2 = 'https://api.intra.42.fr/v2/me'
+
+        data = {
+            'client_id': 'u-s4t2ud-05bc7429ede0c5e9c150342686cfd8f0992047472194f58e2c62c8c57a983969',
+            'code': code,
+            'client_secret': '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',
+            'grant_type': 'authorization_code',
+            'redirect_uri': 'https://10.11.4.10',
+        }
+
+        response = requests.post(url1, json=data)
+        access_token = response.json().get('access_token')
+
+        Bearer = "Bearer " + access_token
+        headers = {
+        'Authorization': Bearer,
+        }
+        response = requests.get(url2, headers=headers)
+        username = response.json().get('login')
+        email = response.json().get('email')
+        password = ''.join(random.choices(string.ascii_uppercase + string.digits, k = 25))
+        if((User.objects.filter(email=email).exists()) == False):
+            serializer = UserSerializer(data={'email': email, 'username': username, 'password': password})
+            if serializer.is_valid():
+                user = serializer.save()
+        if(User.objects.filter(email=email).exists()):
+            user = User.objects.filter(email=email).first()
+        payload = {
+            'id': user.id,
+            'email': user.email,
+			'username': user.username,
+            'twofactoractive': user.twofactoractive,
+            'is_uploadpp': user.is_uploadpp,
+            'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=1),
+            'iat': datetime.datetime.utcnow()
+        }
+
+        token = jwt.encode(payload, 'secret', algorithm='HS256')
+        response = Response()
+        response.set_cookie(key='jwt', value=token, httponly=False)
+        response.data = {
+            'token': token
+        }
+        return response
+
+class TwoFactor(APIView):
+    def post(self, request):
+        userCode = request.data.get('userCode')
+        username = request.data.get('username')
+        user = User.objects.filter(username=username).first()
+
+        if user is None:
+            raise AuthenticationFailed("User not found!")
+
+        totp = pyotp.TOTP(user.twofactorkey)
+        if totp.verify(userCode):
+            response = Response()
+            response.set_cookie(key='2fa', value='', expires=0)
+            payload = {
+                'id': user.id,
+                'email': user.email,
+                'username': user.username,
+                'is_uploadpp': user.is_uploadpp,
+                'twofactoractive': user.twofactoractive,
+                'exp': datetime.datetime.utcnow() + datetime.timedelta(minutes=1),
+                'iat': datetime.datetime.utcnow()
+            }
+            token = jwt.encode(payload, 'secret', algorithm='HS256')
+            response.set_cookie(key='jwt', value=token, httponly=False)
+            response.data = {
+                'token': token
+            }
+            return response
+        else:
+            return Response({'error': 'Invalid TOTP code'}, status=400)
+
+#class UserView(APIView):
+#    def get(self, request):
+#        token = request.COOKIES.get('jwt')
+
+#        if not token:
+#            raise AuthenticationFailed("Unauthenticated!")
+
+#        try:
+#            payload = jwt.decode(token, 'secret', algorithms=['HS256'])
+#        except jwt.ExpiredSignatureError:
+#            raise AuthenticationFailed("Unauthenticated!")
+
+#        user = User.objects.filter(id=payload['id']).first()
+#        serializer = UserSerializer(user)
+#        return Response(serializer.data)
+
+class LogoutView(APIView):
+    def post(self, request):
+        response = Response()
+        response.delete_cookie('jwt')
+        response.data = {
+            'message': 'success'
+        }
+        return response
+
+def home(request):
+    return HttpResponse("Welcome to the homeasdasdasd page!")
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError, NotFound
+from .models import User, Friend
+
+class SendFriendRequestView(APIView):
+    def post(self, request):
+        sender_username = request.data.get('sender_username')
+        receiver_username = request.data.get('username')
+
+        if not sender_username or not receiver_username:
+            return Response({'error': 'Both sender and receiver usernames are required'}, status=400)
+
+        sender = User.objects.filter(username=sender_username).first()
+        if not sender:
+            return Response({'error': 'Sender not found'}, status=404)
+
+        if sender.username == receiver_username:
+            raise ValidationError("You cannot send a friend request to yourself.")
+
+        receiver = User.objects.filter(username=receiver_username).first()
+        if not receiver:
+            raise NotFound("User not found.")
+
+        friend_request, created = Friend.objects.get_or_create(sender=sender, receiver=receiver)
+        if not created:
+            raise ValidationError("Friend request already sent.")
+
+        return Response({'message': 'Friend request sent successfully'}, status=201)
+
+class AcceptFriendRequestView(APIView):
+    def post(self, request):
+        sender_username = request.data.get('sender_username')
+        receiver_username = request.data.get('receiver_username')
+
+        if not sender_username or not receiver_username:
+            return Response({'error': 'Both sender and receiver usernames are required'}, status=400)
+
+        # Fetch the sender and receiver users
+        sender = User.objects.filter(username=sender_username).first()
+        receiver = User.objects.filter(username=receiver_username).first()
+
+        if not sender or not receiver:
+            return Response({'error': 'Sender or receiver not found'}, status=404)
+
+        # Find the pending friend request
+        friend_request = Friend.objects.filter(sender=sender, receiver=receiver, status='pending').first()
+
+        if not friend_request:
+            raise NotFound("Friend request not found.")
+
+        # Accept the friend request
+        friend_request.status = 'accepted'
+        friend_request.save()
+
+        return Response({'message': 'Friend request accepted'}, status=200)
+
+class DeclineFriendRequestView(APIView):
+    def post(self, request):
+        sender_username = request.data.get('sender_username')
+        receiver_username = request.data.get('receiver_username')
+
+        if not sender_username or not receiver_username:
+            return Response({'error': 'Both sender and receiver usernames are required'}, status=400)
+
+        # Fetch the sender and receiver users
+        sender = User.objects.filter(username=sender_username).first()
+        receiver = User.objects.filter(username=receiver_username).first()
+
+        if not sender or not receiver:
+            return Response({'error': 'Sender or receiver not found'}, status=404)
+
+        # Find the pending friend request
+        friend_request = Friend.objects.filter(sender=sender, receiver=receiver, status='pending').first()
+
+        if not friend_request:
+            return Response({'error': 'Friend request not found'}, status=404)
+
+        # Decline the friend request
+        friend_request.status = 'declined'
+        friend_request.save()
+
+        return Response({'message': 'Friend request declined'}, status=200)
+
+
+class InvitationsView(APIView):
+    def get(self, request):
+        username = request.query_params.get('username')
+        user = User.objects.filter(username=username).first()
+
+        if user is None:
+            raise AuthenticationFailed("User not found!")
+
+        invitations = Friend.objects.filter(receiver=user, status='pending').values('sender__username')
+        return Response(list(invitations), status=200)
+
+class FriendsListView(APIView):
+    def get(self, request):
+        username = request.query_params.get('username')
+        user = User.objects.filter(username=username).first()
+
+        if user is None:
+            raise AuthenticationFailed("User not found!")
+
+        friends = Friend.objects.filter(sender=user, status='accepted').values('receiver__username')
+        friends = list(friends) + list(Friend.objects.filter(receiver=user, status='accepted').values('sender__username'))
+        return Response(friends, status=200)

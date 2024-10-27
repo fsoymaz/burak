@@ -1,0 +1,256 @@
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Friend Center</title>
+	<style>
+		body {
+			background: linear-gradient(135deg, #1a2a6c, #b21f1f, #fdbb2d);
+			min-height: 100vh;
+			padding-top: 20px;
+			color: #333;
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+		}
+
+		.container {
+			background-color: rgba(255, 255, 255, 0.9);
+			border-radius: 15px;
+			padding: 30px;
+			box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+		}
+
+		.card {
+			border: none;
+			border-radius: 10px;
+			box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+			transition: transform 0.3s ease;
+		}
+
+		.card:hover {
+			transform: translateY(-5px);
+		}
+
+		.card-header {
+			background-color: #075E54;
+			color: white;
+			font-weight: bold;
+			border-top-left-radius: 10px;
+			border-top-right-radius: 10px;
+		}
+
+		.friend-item,
+		.invitation-item {
+			margin-bottom: 10px;
+			background-color: #f8f9fa;
+			border-radius: 5px;
+			padding: 10px;
+		}
+
+		.chat-messages {
+			height: 400px;
+			overflow-y: auto;
+			padding: 10px;
+			margin-bottom: 10px;
+			background-color: #E5DDD5;
+			border-radius: 5px;
+			position: relative;
+		}
+
+		.message {
+			max-width: 70%;
+			margin-bottom: 10px;
+			padding: 8px 12px;
+			border-radius: 7px;
+			position: relative;
+			clear: both;
+			word-wrap: break-word;
+			font-size: 14px;
+			line-height: 1.4;
+		}
+
+		.message.sent {
+			float: right;
+			background-color: #DCF8C6;
+			color: #000;
+		}
+
+		.message.received {
+			float: left;
+			background-color: #fff;
+			color: #000;
+		}
+
+		.message-username {
+			font-weight: bold;
+			margin-bottom: 2px;
+			font-size: 0.9em;
+			color: #075E54;
+		}
+
+		.message-time {
+			font-size: 0.75em;
+			color: #999;
+			text-align: right;
+			margin-top: 2px;
+		}
+
+		.btn-primary {
+			background-color: #075E54;
+			border-color: #075E54;
+		}
+
+		.btn-primary:hover {
+			background-color: #054640;
+			border-color: #054640;
+		}
+
+		h1 {
+			color: #075E54;
+			text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+		}
+
+		.message-input {
+			display: flex;
+			padding: 10px;
+			background-color: #f0f0f0;
+			border-bottom-left-radius: 10px;
+			border-bottom-right-radius: 10px;
+		}
+
+		.message-input input {
+			flex-grow: 1;
+			padding: 8px 12px;
+			border: none;
+			border-radius: 20px;
+			margin-right: 10px;
+			font-size: 14px;
+		}
+
+		.message-input button {
+			background-color: #075E54;
+			color: white;
+			border: none;
+			padding: 8px 16px;
+			border-radius: 50%;
+			cursor: pointer;
+			transition: background-color 0.3s ease;
+		}
+
+		.message-input button:hover {
+			background-color: #054640;
+		}
+
+
+
+		/* Remove ping-pong ball animations */
+	</style>
+</head>
+
+<body>
+	<div class="container">
+		<h1 class="text-center mb-4">
+			<i class="fas fa-users"></i> Friend Center
+		</h1>
+
+		<div class="row">
+			<div class="col-md-4">
+				<div class="card mb-4">
+					<div class="card-header">
+						<i class="fas fa-user-plus"></i> Add Friend
+					</div>
+					<div class="card-body">
+						<div class="input-group">
+							<input type="text" id="usernameInput" class="form-control" placeholder="Enter username">
+							<button id="sendRequestButton" class="btn btn-primary">
+								<i class="fas fa-paper-plane"></i> Send
+							</button>
+						</div>
+					</div>
+				</div>
+
+				<div class="card mb-4">
+					<div class="card-header">
+						<i class="fas fa-user-friends"></i> Friends List
+					</div>
+					<div class="card-body">
+						<ul id="friendsList" class="list-group"></ul>
+					</div>
+				</div>
+			</div>
+			<div class="col-md-4">
+				<div class="card">
+					<div class="card-header">
+						<i class="fas fa-comments"></i> Chat Room
+					</div>
+					<div class="card-body">
+						<p id="username-display" class="mb-2"></p>
+						<div id="chat-messages" class="chat-messages" aria-live="polite">
+							<!-- Messages will be inserted here -->
+						</div>
+						<div class="input-group mt-3">
+							<input type="text" id="chat-message-input" class="form-control"
+								placeholder="Type your message...">
+							<button id="chat-message-submit" class="btn btn-primary">
+								<i class="fas fa-paper-plane"></i> Send
+							</button>
+						</div>
+					</div>
+				</div>
+			</div>
+
+			<div class="col-md-4">
+				<div class="card mb-4">
+					<div class="card-header">
+						<i class="fas fa-envelope"></i> Invitations
+					</div>
+					<div class="card-body">
+						<div id="invitationsList"></div>
+					</div>
+				</div>
+
+				<div class="card mb-4">
+					<div class="card-header">
+						<i class="fas fa-user-slash"></i> Blocked Users
+					</div>
+					<div class="card-body">
+						<ul id="BlockedList" class="list-group"></ul>
+					</div>
+				</div>
+			</div>
+
+		</div>
+	</div>
+
+	<!-- Modal for user statistics -->
+	<div class="modal fade" id="infoModal" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
+		<div class="modal-dialog">
+			<div class="modal-content">
+				<div class="modal-header">
+					<h5 class="modal-title" id="infoModalLabel">
+						<i class="fas fa-chart-bar"></i> User Statistics
+					</h5>
+					<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+				</div>
+				<div class="modal-body">
+					<h4 id="usernameDisplay">Stats for User</h4>
+					<table id="statsTable" class="table table-striped">
+						<thead>
+							<tr>
+								<th>Opponent</th>
+								<th>Winner</th>
+								<th>Loser</th>
+								<th>Host Score</th>
+								<th>Guest Score</th>
+							</tr>
+						</thead>
+						<!--<tbody>
+					</table>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+				</div>
+			</div>
+		</div>
+	</div>
+
+
+</body>

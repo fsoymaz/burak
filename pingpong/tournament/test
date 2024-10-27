@@ -1,0 +1,220 @@
+import json
+from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
+from .models import Tournament
+from .views import *
+import asyncio
+from time import sleep
+
+# GameRoom class to manage each game room and its players
+class GameRoom:
+    def __init__(self, room_name):
+        self.room_name = room_name
+        self.game_group1 = None
+        self.game_group2 = None
+        self.players = []  # List to store player names
+        self.start_game = False
+
+    def add_player(self, player_name):
+        self.players.append(player_name)
+        return len(self.players)
+
+    def remove_player(self, player_name):
+        if player_name in self.players:
+            self.players.remove(player_name)
+        return len(self.players)
+
+# Consumer class to handle WebSocket connections and game logic
+class TournamentConsumer(AsyncWebsocketConsumer):
+    rooms = {}  # Dictionary to keep track of all game rooms
+
+    @classmethod
+    def get_or_create_room(cls, room_name):
+        if room_name not in cls.rooms:
+            cls.rooms[room_name] = GameRoom(room_name)
+        return cls.rooms[room_name]
+
+    async def connect(self):
+        self.room_name = self.scope['url_route']['kwargs']['room_name']
+        self.room_group_name = f'game_{self.room_name}'
+
+        # Retrieve or create the game room
+        self.room = self.get_or_create_room(self.room_name)
+
+        # if len(self.room.players) <= 4:
+        #     await self.close()
+
+        if(len(self.room.players) % 2 == 0):
+            await self.channel_layer.group_add(
+                self.room_group_name + "_1",
+                self.channel_name
+            )
+        else:
+            await self.channel_layer.group_add(
+                self.room_group_name + "_2",
+                self.channel_name
+            )
+
+        await self.channel_layer.group_add(
+            self.room_group_name,
+            self.channel_name
+        )
+
+        await self.accept()  # Accept the WebSocket connection
+
+    async def receive(self, text_data):
+
+        data = json.loads(text_data)
+
+        if self.room.start_game:
+            i = self.room.players.index(data['name'])
+            if i == 0 and data['message'] == 2:
+                self.room.game_group1.leftPlayerMoveUp()
+            elif i == 0 and data['message'] == 1:
+                self.room.game_group1.leftPlayerMoveDown()
+            elif i == 2 and data['message'] == 2:
+                self.room.game_group1.leftPlayerMoveUp()
+            elif i == 2 and data['message'] == 1:
+                self.room.game_group1.leftPlayerMoveDown()
+            elif i == 1 and data['message'] == 2:
+                self.room.game_group2.rightPlayerMoveUp()
+            elif i == 1 and data['message'] == 1:
+                self.room.game_group2.rightPlayerMoveDown()
+            elif i == 3 and data['message'] == 2:
+                self.room.game_group2.rightPlayerMoveUp()
+            elif i == 3 and data['message'] == 1:
+                self.room.game_group2.rightPlayerMoveDown()
+
+        elif 'name' in data:
+            player_name = data['name']
+            if player_name not in self.room.players:
+                self.room.add_player(player_name)
+                await self.send_message()
+
+        elif 'start_game' in data:
+            self.room.start_game = True
+            await self.send_start_who_f(self.room.players)
+            await self.start_group_games()
+
+    async def send_message(self):
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'tournament_message',
+                'players': self.room.players,
+            }
+        )
+
+    async def tournament_message(self, event):
+        players = event['players']
+        await self.send(text_data=json.dumps({'players': players}))
+
+
+    async def send_start_who_f(self, player_name):
+        for player in player_name:
+            print("player = " + player)
+            message = {
+            'type': 'game_start_who',
+            'players': player  # Example: extracting serializable data
+            }
+            await self.channel_layer.send(
+                self.get_channel_name(player),
+                {
+                    message,
+                }
+            )
+
+    async def game_start_who(self, event):
+        print("BURADA11")
+        player_name = event['player_name']
+        i = self.room.players.index(player_name)
+        print("BURADA")
+        print(i)
+        if i < 2:
+            print(player_name)
+            await self.send(text_data=json.dumps({'who': '0'}))
+        else:
+            await self.send(text_data=json.dumps({'who': '1'}))
+        
+    def get_channel_name(self, player):
+    # Oyuncunun kanal adını alma yöntemi. Örneğin, oyuncu nesnesi bir dict ise:
+    # return player["channel_name"]
+    # Veya başka bir yapıda ise:
+        return f"channel_for_{player}"  # Bu örnekte, basit bir kanal adı döndürülüyor
+
+    async def start_group_games(self):
+        await asyncio.sleep(0.03)  # Oyunun başlaması için kısa bir bekleme
+
+        # Oyuncuları iki gruba ayır
+        self.group1 = [self.room.players[0], self.room.players[2]]
+        self.group2 = [self.room.players[1], self.room.players[3]]
+        print(self.group1)
+        print(self.group2)
+        # Her grup için kanal katılımı
+
+        # Her grup için oyunları başlat
+        self.room.game_group1 = GamePlay()
+        self.room.game_group2 = GamePlay()
+
+        # game_state = self.room.game_group1.repeat_function()
+
+        # await self.send(text_data=json.dumps({'players': "anaan"}))
+
+        # await self.channel_layer.group_send(
+        #     self.room_group_name + "_1", 
+        #     {
+        #         'type': 'game_update',
+        #         'game': game_state,
+        #         'group': self.group1,
+        #     }
+        # )
+
+        self.game_loop_task1 = asyncio.create_task(self.start_game(self.room.game_group1, self.room_group_name + "_1"))
+        self.game_loop_task2 = asyncio.create_task(self.start_game(self.room.game_group2, self.room_group_name + "_2"))
+
+
+        
+
+    async def start_game(self, game, group_name):
+        print("Game started")
+        while not game.gameOver:
+            await asyncio.sleep(0.03)  # Simulate game ticks
+            game_state = game.repeat_function()
+            await self.channel_layer.group_send(
+                group_name,  # Hangi gruba mesaj gönderileceğini belirtiyoruz
+                {
+                    'type': 'game_update',
+                    'game': game_state,
+                }
+            )
+
+
+
+        # Determine winners and proceed to the final game
+        # if game == self.room.game_group1:
+        #     self.room.group1_winner = group[0] if game.leftPlayerScore > game.rightPlayerScore else group[1]
+        # elif game == self.room.game_group2:
+        #     self.room.group2_winner = group[0] if game.leftPlayerScore > game.rightPlayerScore else group[1]
+
+        # If both groups have winners, start the final game
+        # if hasattr(self.room, 'group1_winner') and hasattr(self.room, 'group2_winner'):
+        #     self.room.game_final = GamePlay()
+        #     await self.start_final_game()
+
+    async def start_final_game(self):
+        self.final_group = [self.room.group1_winner, self.room.group2_winner]
+        await self.start_game(self.room.game_final, self.final_group)
+
+
+    async def game_update(self, event):
+        game_data = event['game']
+
+        # Send game state to all clients
+        await self.send(text_data=json.dumps({
+            'BallX': game_data['BallX'],
+            'BallY': game_data['BallY'],
+            'leftPlayer': game_data['leftPlayer'],
+            'rightPlayer': game_data['rightPlayer'],
+            'leftPlayerScore': game_data['leftPlayerScore'],
+            'rightPlayerScore': game_data['rightPlayerScore'],
+        }))
