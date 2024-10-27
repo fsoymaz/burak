@@ -1,9 +1,7 @@
 import { parseJWT } from "./auth.js";
-import { loadPage } from "./pageLoader.js";
 
 const socket = new WebSocket("wss://10.11.4.10/ws/status/userstatus/");
 let chatSocket = null;
-let currentRoomName = null;
 
 function getSenderUsername() {
   const jwt = localStorage.getItem("jwt");
@@ -266,12 +264,6 @@ async function loadFriendsList() {
       friendNameSpan.textContent = friendUsername;
       item.appendChild(friendNameSpan);
 
-      const messageButton = document.createElement("button");
-      messageButton.className = "btn btn-primary btn-sm ml-2";
-      messageButton.textContent = "Message";
-      messageButton.addEventListener("click", () =>
-        openChatRoom(username, friendUsername)
-      );
 
       const blockButton = document.createElement("button");
       blockButton.className = "btn btn-danger btn-sm ml-2";
@@ -286,7 +278,6 @@ async function loadFriendsList() {
       infoButton.addEventListener("click", () => openModal(friendUsername));
 
       const buttonContainer = document.createElement("div");
-      buttonContainer.appendChild(messageButton);
       buttonContainer.appendChild(blockButton);
       buttonContainer.appendChild(infoButton);
       item.appendChild(buttonContainer);
@@ -413,117 +404,6 @@ async function handleFriendRequest(senderUsername, receiverUsername, action) {
   } catch (error) {
     console.error("Fetch error:", error);
   }
-}
-
-function openChatRoom(username1, username2) {
-  const sortedUsernames = [username1, username2].sort();
-  const newRoomName = `${sortedUsernames[0]}_${sortedUsernames[1]}`;
-
-  if (!currentRoomName || newRoomName !== currentRoomName) {
-    currentRoomName = newRoomName;
-    loadPage("friend").then(() => {
-      setupChatRoom(newRoomName, username1);
-    });
-  } else {
-    console.log("Same room, no need to reload the page.");
-  }
-}
-
-function setupChatRoom(roomName, userName) {
-  console.log("Setting up chat room...");
-
-  document.getElementById(
-    "username-display"
-  ).innerText = `Chatting as: ${userName}`;
-
-  if (chatSocket) {
-    chatSocket.close();
-  }
-
-  chatSocket = new WebSocket(`wss://10.11.4.10/ws/chat/${roomName}/`);
-
-  chatSocket.onmessage = function (e) {
-    const data = JSON.parse(e.data);
-    if (data.message) {
-      addMessageToChat(data.username, data.message, data.username === userName);
-    }
-  };
-
-  chatSocket.onclose = function (e) {
-    console.log("The socket closed unexpectedly");
-  };
-
-  function sendMessage() {
-    if (chatSocket.readyState === WebSocket.OPEN) {
-      const messageInputDom = document.querySelector("#chat-message-input");
-      const message = messageInputDom.value.trim();
-
-      if (message) {
-        chatSocket.send(
-          JSON.stringify({
-            message: message,
-            username: userName,
-            room: roomName,
-          })
-        );
-
-        messageInputDom.value = "";
-      }
-    } else {
-      alert("WebSocket connection is not open.");
-    }
-  }
-
-  document.querySelector("#chat-message-submit").onclick = sendMessage;
-
-  document
-    .querySelector("#chat-message-input")
-    .addEventListener("keypress",
-    function (e) {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        sendMessage();
-      }
-    });
-}
-
-function addMessageToChat(username, message, isSent) {
-  const chatMessages = document.querySelector("#chat-messages");
-  const messageElement = document.createElement("div");
-  messageElement.classList.add("message", isSent ? "sent" : "received");
-
-  const usernameElement = document.createElement("div");
-  usernameElement.classList.add("message-username");
-  usernameElement.textContent = username;
-
-  const messageTextElement = document.createElement("div");
-  messageTextElement.classList.add("message-text");
-  messageTextElement.textContent = message;
-
-  const timeElement = document.createElement("div");
-  timeElement.classList.add("message-time");
-  timeElement.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  messageElement.appendChild(usernameElement);
-  messageElement.appendChild(messageTextElement);
-  messageElement.appendChild(timeElement);
-
-  chatMessages.appendChild(messageElement);
-  scrollToBottom();
-}
-
-function scrollToBottom() {
-  const chatMessages = document.getElementById("chat-messages");
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
-
-function escapeHtml(unsafe) {
-  return unsafe
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
 }
 
 document.addEventListener("DOMContentLoaded", setupFriendPage);

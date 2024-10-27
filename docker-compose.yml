@@ -33,24 +33,6 @@ services:
       webnet:
         ipv4_address: 192.168.32.3
 
-  chat:
-    build: ./chat
-    container_name: chat_service
-    ports:
-      - "8002:8000" # Dış port 8002, iç port 8000
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-    volumes:
-      - code:/code
-      - ./chat:/code/chat
-      - .env:/code/.env
-    depends_on:
-      - db
-      - redis
-      - auth
-    networks:
-      webnet:
-        ipv4_address: 192.168.32.4
 
   front:
     build: ./front
@@ -59,7 +41,6 @@ services:
       - "3000:80"
     depends_on:
       - auth
-      - chat
     volumes:
       - ./front:/usr/share/nginx/html
       - qrdata:/usr/share/nginx/html/qrdata
@@ -80,7 +61,6 @@ services:
     depends_on:
       - front
       - auth
-      - chat
       - game
     networks:
       webnet:

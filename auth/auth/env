@@ -1,0 +1,14 @@
+#auth settings
+SECRET_KEY='django-insecure-htby_zs#54+71jh@b*#6sc(kz$os#lwi+b9k^*ub^sd^liw#no'
+ALLOWED_HOSTS=*
+
+#docker-compose settings
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=mysecretpassword
+POSTGRES_DB=postgres
+DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+
+# .env dosyanızda
+ALLOWED_HOSTS=https://10.11.4.10,https://localhost
+CORS_ORIGIN_WHITELIST=https://10.11.4.10,https://localhost
+CSRF_TRUSTED_ORIGINS=https://10.11.4.10,https://localhost
